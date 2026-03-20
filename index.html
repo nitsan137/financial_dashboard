@@ -1,0 +1,1220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Monthly Dashboard</title>
+
+<!-- PWA -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0891B2">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Dashboard" id="pwa-title">
+<link rel="apple-touch-icon" href="icon.png">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+<style>
+  :root {
+    --bg:        #F4F7FA;
+    --surface:   #FFFFFF;
+    --surface2:  #F0F4F8;
+    --border:    #E2E8F0;
+    --border2:   #CBD5E1;
+    --teal:      #0891B2;
+    --teal-dark: #0E7490;
+    --teal-light:#E0F2FE;
+    --teal-mid:  #BAE6FD;
+    --cyan:      #06B6D4;
+    --cyan-light:#ECFEFF;
+    --green:     #059669;
+    --green-bg:  #ECFDF5;
+    --red:       #DC2626;
+    --red-bg:    #FEF2F2;
+    --amber:     #D97706;
+    --amber-bg:  #FFFBEB;
+    --text:      #0F172A;
+    --text2:     #334155;
+    --text3:     #64748B;
+    --text4:     #94A3B8;
+    --shadow-sm: 0 1px 3px rgba(15,23,42,.06), 0 1px 2px rgba(15,23,42,.04);
+    --shadow:    0 4px 12px rgba(15,23,42,.08), 0 2px 4px rgba(15,23,42,.04);
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Plus Jakarta Sans', sans-serif;
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+  }
+  .page { max-width: 480px; margin: 0 auto; padding: 0 0 56px; }
+
+  /* ── TOP BAR ── */
+  .topbar {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 14px 16px;
+    display: flex; align-items: center; justify-content: space-between;
+    position: sticky; top: 0; z-index: 10;
+    box-shadow: var(--shadow-sm);
+    opacity: 0; animation: fadeDown .4s ease .05s forwards;
+  }
+  .brand { display: flex; align-items: center; gap: 10px; }
+  .brand-logo {
+    width: 36px; height: 36px; border-radius: 8px;
+    object-fit: contain;
+  }
+  .brand-name { font-size: 16px; font-weight: 700; color: var(--text); letter-spacing: -.02em; }
+  .topbar-right { display: flex; align-items: center; gap: 10px; }
+  .topbar-meta { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; }
+  .topbar-meta-row { display: flex; align-items: center; gap: 6px; }
+  .date-label { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--text3); letter-spacing: .03em; }
+  .period-badge {
+    font-size: 10px; font-weight: 600;
+    background: var(--teal-light); color: var(--teal-dark);
+    padding: 2px 8px; border-radius: 99px;
+    letter-spacing: .04em; text-transform: uppercase;
+  }
+
+  /* ── REFRESH BUTTON ── */
+  .refresh-btn {
+    width: 34px; height: 34px; border-radius: 10px;
+    background: var(--surface2); border: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; transition: all .15s; flex-shrink: 0;
+    color: var(--text3);
+  }
+  .refresh-btn:hover { background: var(--teal-light); border-color: var(--teal-mid); color: var(--teal); }
+  .refresh-btn:active { transform: scale(.93); }
+  .refresh-btn svg { width: 15px; height: 15px; transition: transform .4s ease; }
+  .refresh-btn.spinning svg { animation: spin .7s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── LAST UPDATED ── */
+  .last-updated {
+    text-align: center;
+    font-family: 'DM Mono', monospace; font-size: 10px; color: var(--text4);
+    padding: 8px 16px 0;
+    opacity: 0; transition: opacity .3s;
+  }
+  .last-updated.visible { opacity: 1; }
+
+  /* ── ERROR TOAST ── */
+  .toast {
+    margin: 12px 16px 0;
+    background: #FEF2F2; border: 1px solid #FECACA; border-radius: 12px;
+    padding: 10px 14px; font-size: 12px; color: var(--red);
+    display: none; align-items: flex-start; gap: 8px; line-height: 1.5;
+  }
+  .toast.show { display: flex; }
+  .toast svg { flex-shrink: 0; margin-top: 1px; }
+
+  /* ── HERO ── */
+  .hero {
+    background: linear-gradient(160deg, var(--teal-dark) 0%, var(--teal) 55%, var(--cyan) 100%);
+    padding: 32px 20px 28px; position: relative; overflow: hidden;
+    opacity: 0; animation: fadeUp .45s ease .1s forwards;
+  }
+  .hero::before {
+    content: ''; position: absolute; top: -60px; right: -40px;
+    width: 200px; height: 200px; border-radius: 50%;
+    background: rgba(255,255,255,.06); pointer-events: none;
+  }
+  .hero::after {
+    content: ''; position: absolute; bottom: -80px; left: -30px;
+    width: 240px; height: 240px; border-radius: 50%;
+    background: rgba(255,255,255,.04); pointer-events: none;
+  }
+  .hero-eyebrow { font-size: 11px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: rgba(255,255,255,.65); margin-bottom: 8px; }
+  .hero-value { font-size: clamp(48px, 13vw, 64px); font-weight: 800; line-height: 1; letter-spacing: -.03em; color: #fff; position: relative; z-index: 1; }
+  .hero-value sup { font-size: .4em; font-weight: 600; vertical-align: super; opacity: .8; }
+  .hero-value sub { font-size: .25em; font-weight: 400; vertical-align: baseline; letter-spacing: .06em; opacity: .6; margin-left: 2px; }
+  .hero-meta { display: flex; align-items: center; gap: 10px; margin-top: 14px; position: relative; z-index: 1; flex-wrap: wrap; }
+  .hero-prev { font-family: 'DM Mono', monospace; font-size: 12px; color: rgba(255,255,255,.55); }
+  .change-chip {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 4px 10px; border-radius: 99px;
+    font-family: 'DM Mono', monospace; font-size: 11px; font-weight: 500;
+    background: rgba(255,255,255,.15); color: #fff; border: 1px solid rgba(255,255,255,.2);
+  }
+  .change-chip.neg { background: rgba(220,38,38,.25); border-color: rgba(220,38,38,.3); }
+  .change-chip.pos { background: rgba(5,150,105,.3); border-color: rgba(5,150,105,.4); }
+  .change-chip svg { width: 9px; height: 9px; }
+  .hero-fx { position: absolute; top: 20px; right: 20px; z-index: 1; text-align: right; }
+  .fx-label { font-family: 'DM Mono', monospace; font-size: 9px; letter-spacing: .1em; text-transform: uppercase; color: rgba(255,255,255,.45); }
+  .fx-rate { font-family: 'DM Mono', monospace; font-size: 14px; font-weight: 500; color: rgba(255,255,255,.85); }
+
+  /* ── KPI GRID ── */
+  .kpi-grid {
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: 12px; padding: 20px 16px 4px;
+    opacity: 0; animation: fadeUp .45s ease .2s forwards;
+  }
+  .kpi-card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 16px; box-shadow: var(--shadow-sm); display: flex; flex-direction: column; gap: 4px; }
+  .kpi-label { font-size: 10px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--text3); }
+  .kpi-value { font-family: 'DM Mono', monospace; font-size: 24px; font-weight: 500; letter-spacing: -.02em; line-height: 1.1; color: var(--text); }
+  .kpi-value.teal { color: var(--teal); }
+  .kpi-value.red  { color: var(--red); }
+  .kpi-note { font-size: 10px; color: var(--text4); margin-top: 2px; }
+  .kpi-bar { height: 3px; border-radius: 99px; background: var(--border); margin-top: 6px; overflow: hidden; }
+  .kpi-bar-fill { height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--teal) 0%, var(--cyan) 100%); width: 0; transition: width 1s ease .5s; }
+
+  /* ── SECTION ── */
+  .section { padding: 20px 16px 0; opacity: 0; animation: fadeUp .45s ease var(--d,.3s) forwards; }
+  .section-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .section-title { font-size: 12px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--text3); }
+  .section-total { font-family: 'DM Mono', monospace; font-size: 12px; font-weight: 500; color: var(--text2); }
+
+  /* ── CARD ── */
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; overflow: hidden; box-shadow: var(--shadow-sm); }
+
+  /* ── STACK BAR ── */
+  .stack-wrap { padding: 16px 16px 10px; }
+  .stack-bar { height: 8px; border-radius: 99px; overflow: hidden; display: flex; gap: 2px; background: var(--border); }
+  .sb { height: 100%; border-radius: 99px; transition: width 1.1s cubic-bezier(.4,0,.2,1) .4s; }
+  .sb-usd    { background: var(--teal); }
+  .sb-mmf    { background: var(--cyan); }
+  .sb-svb    { background: #7C3AED; }
+  .sb-stripe { background: #6366F1; }
+  .sb-ils    { background: var(--amber); }
+  .sb-res    { background: #94A3B8; }
+  .stack-legend { display: flex; flex-wrap: wrap; gap: 6px 12px; padding: 8px 16px 12px; }
+  .leg { display: flex; align-items: center; gap: 5px; font-family: 'DM Mono', monospace; font-size: 10px; color: var(--text3); }
+  .leg-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+
+  /* ── TABLE ROWS ── */
+  .tbl-row { display: flex; align-items: center; justify-content: space-between; padding: 11px 16px; border-top: 1px solid var(--border); transition: background .12s; }
+  .tbl-row:hover { background: var(--bg); }
+  .tbl-row.subcategory-header { background: var(--surface2); border-top: 1px solid var(--border); padding: 8px 16px; }
+  .subcategory-label { font-size: 10px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--text3); display: flex; align-items: center; gap: 6px; }
+  .subcategory-label::after { content: ''; flex: 1; height: 1px; background: var(--border2); width: 40px; }
+  .tbl-row.total-row { background: var(--teal-light); border-top: 2px solid var(--teal-mid); }
+  .tbl-row.total-row:hover { background: var(--teal-light); }
+  .row-left { display: flex; align-items: center; gap: 10px; }
+  .row-icon { width: 30px; height: 30px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 13px; flex-shrink: 0; }
+  .row-name { font-size: 13px; font-weight: 600; color: var(--text); line-height: 1.2; }
+  .row-sub { font-size: 10px; color: var(--text4); font-weight: 400; margin-top: 1px; }
+  .row-right { text-align: right; }
+  .row-val { font-family: 'DM Mono', monospace; font-size: 13px; font-weight: 500; color: var(--text); }
+  .tbl-row.total-row .row-val { font-size: 14px; font-weight: 600; color: var(--teal-dark); }
+  .tbl-row.total-row .row-name { font-size: 14px; font-weight: 700; color: var(--teal-dark); }
+  .row-pct { font-family: 'DM Mono', monospace; font-size: 10px; color: var(--text4); margin-top: 1px; }
+  .tbl-row.total-row .row-pct { color: var(--teal); }
+
+  /* ── BURN RATE ── */
+  .br-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; background: var(--red-bg); border-bottom: 1px solid #FECACA; }
+  .br-header-label { font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--red); }
+  .br-header-val { font-family: 'DM Mono', monospace; font-size: 20px; font-weight: 500; color: var(--red); }
+  .br-row { padding: 12px 16px; border-top: 1px solid var(--border); }
+  .br-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 7px; }
+  .br-name { font-size: 13px; font-weight: 600; color: var(--text); display: flex; align-items: center; gap: 7px; }
+  .br-badge { font-size: 9px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; padding: 2px 7px; border-radius: 99px; }
+  .br-badge.pos { background: var(--green-bg); color: var(--green); }
+  .br-badge.neg { background: var(--red-bg); color: var(--red); }
+  .br-amount { font-family: 'DM Mono', monospace; font-size: 14px; font-weight: 500; }
+  .br-amount.pos { color: var(--green); }
+  .br-amount.neg { color: var(--red); }
+  .br-track { height: 5px; border-radius: 99px; background: var(--border); overflow: hidden; }
+  .br-fill { height: 100%; border-radius: 99px; width: 0; transition: width 1.2s cubic-bezier(.4,0,.2,1) .5s; }
+  .br-fill.pos { background: linear-gradient(90deg, #10B981 0%, #34D399 100%); }
+  .br-fill.neg { background: linear-gradient(90deg, var(--red) 0%, #F87171 100%); }
+
+  /* ── PREV CASH CARD ── */
+  .prev-cash-card { display: flex; align-items: center; justify-content: space-between; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 14px 16px; box-shadow: var(--shadow-sm); }
+  .prev-label { font-size: 12px; font-weight: 600; color: var(--text3); }
+  .prev-val { font-family: 'DM Mono', monospace; font-size: 18px; font-weight: 500; color: var(--text2); }
+
+  /* ── FOOTER ── */
+  .footer { padding: 32px 16px 0; text-align: center; opacity: 0; animation: fadeUp .45s ease .6s forwards; }
+  .footer p { font-size: 11px; color: var(--text4); line-height: 1.6; }
+  .footer-install-btn {
+    display: inline-flex; align-items: center; gap: 7px;
+    margin: 14px auto 0;
+    padding: 10px 22px; border-radius: 10px;
+    background: var(--teal-light); border: 1.5px solid var(--teal-mid);
+    color: var(--teal-dark); font: 600 13px 'Plus Jakarta Sans', sans-serif;
+    cursor: pointer; transition: background .15s, border-color .15s;
+  }
+  .footer-install-btn:hover { background: var(--teal-mid); border-color: var(--teal); }
+  .footer-install-btn svg { width: 15px; height: 15px; }
+  .ios-hint {
+    display: none; margin-top: 8px;
+    font-size: 12px; color: var(--teal-dark);
+    background: var(--teal-light); border: 1px solid var(--teal-mid);
+    border-radius: 8px; padding: 8px 12px;
+  }
+
+  /* ── LOCK SCREEN ── */
+  .lock-screen {
+    position: fixed; inset: 0; z-index: 9999;
+    background: linear-gradient(160deg, var(--teal-dark) 0%, var(--teal) 55%, var(--cyan) 100%);
+    display: flex; align-items: center; justify-content: center;
+    padding: 24px;
+    transition: opacity .4s ease, transform .4s ease;
+  }
+  .lock-screen.hidden { opacity: 0; transform: scale(1.04); pointer-events: none; }
+
+  .lock-card {
+    background: rgba(255,255,255,.12);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255,255,255,.22);
+    border-radius: 24px; padding: 36px 28px 32px;
+    width: 100%; max-width: 340px;
+    text-align: center;
+  }
+  .lock-logo {
+    width: 64px; height: 64px;
+    display: flex; align-items: center; justify-content: center;
+    margin: 0 auto 18px;
+  }
+  .lock-logo img { width: 48px; height: 48px; object-fit: contain; }
+  .lock-title { font-size: 20px; font-weight: 800; color: #fff; letter-spacing: -.02em; margin-bottom: 4px; }
+  .lock-sub { font-size: 13px; color: rgba(255,255,255,.6); margin-bottom: 28px; }
+
+  .lock-input-wrap { position: relative; margin-bottom: 12px; }
+  .lock-input {
+    width: 100%; padding: 14px 46px 14px 16px;
+    background: rgba(255,255,255,.15);
+    border: 1.5px solid rgba(255,255,255,.25);
+    border-radius: 14px; outline: none;
+    font-family: 'DM Mono', monospace; font-size: 15px;
+    color: #fff; letter-spacing: .1em;
+    transition: border-color .15s, background .15s;
+  }
+  .lock-input::placeholder { color: rgba(255,255,255,.4); letter-spacing: .04em; font-family: 'Plus Jakarta Sans', sans-serif; font-size: 13px; }
+  .lock-input:focus { border-color: rgba(255,255,255,.6); background: rgba(255,255,255,.2); }
+  .lock-input.error { border-color: #FCA5A5; animation: shake .35s ease; }
+
+  .lock-eye {
+    position: absolute; right: 14px; top: 50%; transform: translateY(-50%);
+    background: none; border: none; cursor: pointer; padding: 4px;
+    color: rgba(255,255,255,.5); line-height: 0;
+  }
+  .lock-eye:hover { color: rgba(255,255,255,.85); }
+
+  .lock-btn {
+    width: 100%; padding: 14px;
+    background: #fff; border: none; border-radius: 14px;
+    font-family: 'Plus Jakarta Sans', sans-serif;
+    font-size: 14px; font-weight: 700; color: var(--teal-dark);
+    cursor: pointer; letter-spacing: .02em;
+    transition: opacity .15s, transform .1s;
+  }
+  .lock-btn:hover { opacity: .92; }
+  .lock-btn:active { transform: scale(.97); }
+
+  .lock-error {
+    font-size: 12px; color: #FCA5A5;
+    margin-top: 10px; min-height: 18px;
+    transition: opacity .2s;
+  }
+  .lock-error.hidden { opacity: 0; }
+
+  @keyframes shake {
+    0%,100% { transform: translateX(0); }
+    20%      { transform: translateX(-8px); }
+    40%      { transform: translateX(8px); }
+    60%      { transform: translateX(-5px); }
+    80%      { transform: translateX(5px); }
+  }
+
+  /* ── ANIMATIONS ── */
+  @keyframes fadeUp   { from { opacity:0; transform:translateY(14px); } to { opacity:1; transform:translateY(0); } }
+  @keyframes fadeDown { from { opacity:0; transform:translateY(-8px); } to { opacity:1; transform:translateY(0); } }
+
+  /* ── MONTH TABS ── */
+  .month-tabs-wrap {
+    padding: 12px 16px 0;
+  }
+  .month-tabs {
+    display: flex; gap: 7px;
+    overflow-x: auto; padding-bottom: 2px;
+    scrollbar-width: none;
+  }
+  .month-tabs::-webkit-scrollbar { display: none; }
+  .month-tab {
+    flex-shrink: 0; white-space: nowrap;
+    padding: 6px 14px; border-radius: 99px;
+    border: 1.5px solid var(--border);
+    background: var(--surface); color: var(--text3);
+    font-family: 'Plus Jakarta Sans', sans-serif;
+    font-size: 12px; font-weight: 600; cursor: pointer;
+    transition: all .15s;
+  }
+  .month-tab:hover { border-color: var(--teal-mid); color: var(--teal); }
+  .month-tab.active { background: var(--teal); border-color: var(--teal); color: #fff; }
+
+  /* ── INSTALL BANNER ── */
+  .install-banner {
+    margin: 10px 16px 0;
+    background: var(--surface); border: 1px solid var(--teal-mid);
+    border-radius: 14px; padding: 11px 14px;
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    box-shadow: var(--shadow-sm);
+    animation: fadeUp .35s ease forwards;
+  }
+  .install-left { display: flex; align-items: center; gap: 10px; }
+  .install-left img { border-radius: 8px; flex-shrink: 0; }
+  .install-title { font-size: 13px; font-weight: 700; color: var(--text); }
+  .install-sub { font-size: 10px; color: var(--text3); margin-top: 1px; line-height: 1.4; }
+  .install-right { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+  .install-btn {
+    padding: 7px 14px; border-radius: 99px; border: none; cursor: pointer;
+    background: var(--teal); color: #fff;
+    font-family: 'Plus Jakarta Sans', sans-serif;
+    font-size: 12px; font-weight: 700; letter-spacing: .03em;
+    transition: opacity .15s;
+  }
+  .install-btn:hover { opacity: .85; }
+  .install-close {
+    width: 28px; height: 28px; border-radius: 50%; border: none;
+    background: var(--surface2); color: var(--text4); cursor: pointer;
+    font-size: 13px; display: flex; align-items: center; justify-content: center;
+  }
+
+  /* ── SKELETON PULSE ── */
+  .loading .row-val, .loading .kpi-value span, .loading .br-amount,
+  .loading .prev-val, .loading .hero-value span, .loading .br-header-val {
+    color: transparent !important;
+    background: linear-gradient(90deg, #E2E8F0 25%, #F0F4F8 50%, #E2E8F0 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.2s infinite;
+    border-radius: 4px;
+  }
+  @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+</style>
+</head>
+<body>
+
+<!-- ── LOCK SCREEN ── -->
+<div class="lock-screen" id="lock-screen">
+  <div class="lock-card">
+    <div class="lock-logo"><img src="icon.png" alt=""></div>
+    <div class="lock-title" id="lock-company-name"></div>
+    <div class="lock-sub">Monthly Financial Dashboard</div>
+    <div class="lock-input-wrap">
+      <input
+        class="lock-input" id="lock-input"
+        type="password" placeholder="Enter access code"
+        autocomplete="off" autocorrect="off" spellcheck="false"
+        onkeydown="if(event.key==='Enter') unlock()"
+      >
+      <button class="lock-eye" id="lock-eye" onclick="toggleEye()" tabindex="-1">
+        <svg id="eye-icon" width="18" height="18" viewBox="0 0 20 20" fill="none">
+          <path d="M2 10s3-6 8-6 8 6 8 6-3 6-8 6-8-6-8-6z" stroke="currentColor" stroke-width="1.5"/>
+          <circle cx="10" cy="10" r="2.5" stroke="currentColor" stroke-width="1.5"/>
+        </svg>
+      </button>
+    </div>
+    <button class="lock-btn" onclick="unlock()">Access Dashboard</button>
+    <div class="lock-error hidden" id="lock-error">Incorrect access code. Try again.</div>
+  </div>
+</div>
+
+<div class="page">
+
+  <!-- TOP BAR -->
+  <header class="topbar">
+    <div class="brand">
+      <img src="icon.png" class="brand-logo" alt="">
+      <div class="brand-name" id="brand-company-name"></div>
+    </div>
+    <div class="topbar-right">
+      <div class="topbar-meta">
+        <span class="date-label" id="topbar-date">Loading…</span>
+        <div class="topbar-meta-row">
+          <button class="refresh-btn" id="refresh-btn" title="Refresh data" onclick="fetchAllData(true)">
+            <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M13.5 8a5.5 5.5 0 1 1-1.1-3.3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+              <path d="M12 3l.4 1.8L10.2 5.2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+          <span class="period-badge">Monthly Report</span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- LAST UPDATED -->
+  <div class="last-updated" id="last-updated"></div>
+
+  <!-- INSTALL BANNER -->
+  <div class="install-banner" id="install-banner" style="display:none">
+    <div class="install-left">
+      <img src="icon.png" width="32" height="32" alt="">
+      <div>
+        <div class="install-title" id="install-company-name">Install Dashboard</div>
+        <div class="install-sub" id="install-sub">Add to Home Screen for quick access</div>
+      </div>
+    </div>
+    <div class="install-right">
+      <button class="install-btn" id="install-btn">Install</button>
+      <button class="install-close" onclick="document.getElementById('install-banner').remove()">✕</button>
+    </div>
+  </div>
+
+  <!-- MONTH TABS -->
+  <div class="month-tabs-wrap" id="month-tabs-wrap" style="display:none">
+    <div class="month-tabs" id="month-tabs"></div>
+  </div>
+
+  <!-- ERROR TOAST -->
+  <div class="toast" id="error-toast">
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" stroke="#DC2626" stroke-width="1.5"/><path d="M8 5v3.5M8 10.5v.5" stroke="#DC2626" stroke-width="1.5" stroke-linecap="round"/></svg>
+    <span id="error-msg">Could not load Dashboard.xlsx.</span>
+  </div>
+
+  <!-- HERO -->
+  <div class="hero">
+    <div class="hero-fx">
+      <div class="fx-label">USD / ILS</div>
+      <div class="fx-rate" id="hero-fx-rate">—</div>
+    </div>
+    <div class="hero-eyebrow">Total Cash Position</div>
+    <div class="hero-value">
+      <sup>$</sup><span id="hero-total" class="count-num" data-target="0">—</span><sub>K</sub>
+    </div>
+    <div class="hero-meta">
+      <span class="hero-prev" id="hero-prev">—</span>
+      <span class="change-chip" id="change-chip">—</span>
+    </div>
+  </div>
+
+  <!-- KPI GRID -->
+  <div class="kpi-grid">
+    <div class="kpi-card">
+      <div class="kpi-label">MRR</div>
+      <div class="kpi-value teal">$<span id="kpi-mrr" class="count-num" data-target="0">—</span>K</div>
+      <div class="kpi-note">Monthly Recurring Revenue</div>
+      <div class="kpi-bar"><div class="kpi-bar-fill" id="kpi-mrr-bar"></div></div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">ARR</div>
+      <div class="kpi-value teal">$<span id="kpi-arr" class="count-num" data-target="0">—</span>K</div>
+      <div class="kpi-note">Annual Run Rate</div>
+      <div class="kpi-bar"><div class="kpi-bar-fill" id="kpi-arr-bar"></div></div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Net BR</div>
+      <div class="kpi-value red">−$<span id="kpi-net-br" class="count-num" data-target="0">—</span>K</div>
+      <div class="kpi-note">Net Burn Rate</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Gross BR</div>
+      <div class="kpi-value red">−$<span id="kpi-gross-br" class="count-num" data-target="0">—</span>K</div>
+      <div class="kpi-note">Gross Burn Rate</div>
+    </div>
+  </div>
+
+  <!-- BANK STATEMENT -->
+  <section class="section" style="--d:.3s">
+    <div class="section-head">
+      <div class="section-title">Bank Statement</div>
+      <div class="section-total">All figures in $K</div>
+    </div>
+    <div class="card">
+
+      <div class="stack-wrap">
+        <div class="stack-bar">
+          <div class="sb sb-usd"    id="sb-usd"    style="width:0%"></div>
+          <div class="sb sb-mmf"    id="sb-mmf"    style="width:0%"></div>
+          <div class="sb sb-svb"    id="sb-svb"    style="width:0%"></div>
+          <div class="sb sb-stripe" id="sb-stripe" style="width:0%"></div>
+          <div class="sb sb-ils"    id="sb-ils"    style="width:0%"></div>
+          <div class="sb sb-res"    id="sb-res"    style="width:0%"></div>
+        </div>
+      </div>
+      <div class="stack-legend">
+        <div class="leg"><div class="leg-dot" style="background:var(--teal)"></div><span id="leg-usd">USD</span></div>
+        <div class="leg"><div class="leg-dot" style="background:var(--cyan)"></div><span id="leg-mmf">MMF</span></div>
+        <div class="leg"><div class="leg-dot" style="background:#7C3AED"></div><span id="leg-svb">SVB</span></div>
+        <div class="leg"><div class="leg-dot" style="background:#6366F1"></div><span id="leg-stripe">Stripe</span></div>
+        <div class="leg"><div class="leg-dot" style="background:var(--amber)"></div><span id="leg-ils">ILS</span></div>
+        <div class="leg"><div class="leg-dot" style="background:#94A3B8"></div><span id="leg-res">Restricted</span></div>
+      </div>
+
+      <div class="tbl-row" style="padding:8px 16px; background:var(--surface2); border-top:1px solid var(--border);">
+        <span style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--text4);">Account</span>
+        <span style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--text4);">Total USD</span>
+      </div>
+
+      <!-- ILS Account -->
+      <div class="tbl-row">
+        <div class="row-left">
+          <div class="row-icon" style="background:#F0FDF4;font-size:17px;font-weight:700;color:#16A34A;font-family:'DM Mono',monospace;letter-spacing:-.02em">₪</div>
+          <div><div class="row-name">ILS Account</div><div class="row-sub">Local Currency</div></div>
+        </div>
+        <div class="row-right">
+          <div class="row-val" id="ils-val">—</div>
+          <div class="row-pct" id="ils-pct">—</div>
+        </div>
+      </div>
+
+      <!-- USD Account -->
+      <div class="tbl-row">
+        <div class="row-left">
+          <div class="row-icon" style="background:var(--teal-light);font-size:17px;font-weight:700;color:var(--teal-dark);font-family:'DM Mono',monospace">$</div>
+          <div><div class="row-name">USD Account</div><div class="row-sub">Operating · Bank</div></div>
+        </div>
+        <div class="row-right">
+          <div class="row-val" id="usd-val">—</div>
+          <div class="row-pct" id="usd-pct">—</div>
+        </div>
+      </div>
+
+      <!-- Stripe -->
+      <div class="tbl-row">
+        <div class="row-left">
+          <div class="row-icon" style="background:#F3F0FF;padding:0;overflow:hidden">
+            <svg viewBox="0 0 32 32" width="30" height="30" fill="none"><rect width="32" height="32" fill="#F3F0FF"/><path d="M15.28 13.04c0-.88.72-1.22 1.92-1.22 1.72 0 3.88.52 5.6 1.44V8.5c-1.88-.74-3.74-1.04-5.6-1.04C13.04 7.46 10 9.26 10 13.3c0 6.24 8.6 5.24 8.6 7.92 0 1.04-.9 1.38-2.16 1.38-1.88 0-4.28-.78-6.18-1.82v4.84c2.1.9 4.22 1.28 6.18 1.28 4.7 0 7.92-2.32 7.92-6.4-.02-6.74-8.58-5.54-8.58-7.46z" fill="#635BFF"/></svg>
+          </div>
+          <div><div class="row-name">Stripe</div><div class="row-sub">Payment Processor</div></div>
+        </div>
+        <div class="row-right">
+          <div class="row-val" id="stripe-val">—</div>
+          <div class="row-pct" id="stripe-pct">—</div>
+        </div>
+      </div>
+
+      <!-- SVB Account -->
+      <div class="tbl-row">
+        <div class="row-left">
+          <div class="row-icon" style="background:#EFF6FF;padding:0;overflow:hidden">
+            <svg viewBox="0 0 32 32" width="30" height="30" fill="none"><rect width="32" height="32" fill="#EFF6FF"/><text x="16" y="21" text-anchor="middle" font-family="'Plus Jakarta Sans',sans-serif" font-size="9" font-weight="800" fill="#1D4ED8" letter-spacing="-.3">SVB</text><rect x="7" y="23" width="18" height="2" rx="1" fill="#3B82F6"/></svg>
+          </div>
+          <div><div class="row-name">SVB Account</div><div class="row-sub">Silicon Valley Bank</div></div>
+        </div>
+        <div class="row-right">
+          <div class="row-val" id="svb-val">—</div>
+          <div class="row-pct" id="svb-pct">—</div>
+        </div>
+      </div>
+
+      <!-- Other Securities (MMF) -->
+      <div class="tbl-row">
+        <div class="row-left">
+          <div class="row-icon" style="background:var(--cyan-light)">📈</div>
+          <div><div class="row-name">Other Securities</div><div class="row-sub">Money Market Fund</div></div>
+        </div>
+        <div class="row-right">
+          <div class="row-val" id="mmf-val">—</div>
+          <div class="row-pct" id="mmf-pct">—</div>
+        </div>
+      </div>
+
+      <!-- Restricted Cash header -->
+      <div class="tbl-row subcategory-header">
+        <div class="subcategory-label">Restricted Cash</div>
+      </div>
+
+      <!-- Bank Deposits -->
+      <div class="tbl-row">
+        <div class="row-left">
+          <div class="row-icon" style="background:#F8FAFC">🏛️</div>
+          <div><div class="row-name">Bank Deposits</div><div class="row-sub">Restricted</div></div>
+        </div>
+        <div class="row-right">
+          <div class="row-val" id="bankdep-val">—</div>
+          <div class="row-pct">—</div>
+        </div>
+      </div>
+
+      <!-- Restricted Deposit -->
+      <div class="tbl-row">
+        <div class="row-left">
+          <div class="row-icon" style="background:var(--amber-bg)">🔒</div>
+          <div><div class="row-name">Restricted Deposit</div><div class="row-sub">Bank Guarantee</div></div>
+        </div>
+        <div class="row-right">
+          <div class="row-val" id="res-val" style="color:var(--amber)">—</div>
+          <div class="row-pct" id="res-pct">—</div>
+        </div>
+      </div>
+
+      <!-- Total Cash -->
+      <div class="tbl-row total-row">
+        <div class="row-left">
+          <div class="row-icon" style="background:var(--teal);color:white;font-size:14px">✦</div>
+          <div>
+            <div class="row-name">Total Cash</div>
+            <div class="row-sub" id="total-cash-sub" style="color:var(--teal)">All accounts</div>
+          </div>
+        </div>
+        <div class="row-right">
+          <div class="row-val" id="total-cash-val">—</div>
+          <div class="row-pct">100%</div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- PREVIOUS MONTH -->
+  <section class="section" style="--d:.4s">
+    <div class="prev-cash-card">
+      <div>
+        <div class="prev-label">Previous Month Cash</div>
+        <div style="font-size:10px;color:var(--text4);margin-top:2px;" id="prev-month-label">—</div>
+      </div>
+      <div class="prev-val" id="prev-cash-val">—</div>
+    </div>
+  </section>
+
+  <!-- BURN RATE BREAKDOWN -->
+  <section class="section" style="--d:.5s">
+    <div class="section-head">
+      <div class="section-title">Burn Rate Breakdown</div>
+    </div>
+    <div class="card">
+
+      <div class="br-header">
+        <span class="br-header-label">Net BR</span>
+        <span class="br-header-val" id="br-total-val">—</span>
+      </div>
+
+      <div class="br-row">
+        <div class="br-top">
+          <span class="br-name">Income <span class="br-badge pos">Revenue</span></span>
+          <span class="br-amount pos" id="br-income-amt">—</span>
+        </div>
+        <div class="br-track"><div class="br-fill pos" id="br-income-fill"></div></div>
+      </div>
+
+      <div class="br-row">
+        <div class="br-top">
+          <span class="br-name">Financial Income <span class="br-badge pos">Interest</span></span>
+          <span class="br-amount pos" id="br-fincome-amt">—</span>
+        </div>
+        <div class="br-track"><div class="br-fill pos" id="br-fincome-fill"></div></div>
+      </div>
+
+      <div class="br-row">
+        <div class="br-top">
+          <span class="br-name">Other Expenses <span class="br-badge neg">OpEx</span></span>
+          <span class="br-amount neg" id="br-other-amt">—</span>
+        </div>
+        <div class="br-track"><div class="br-fill neg" id="br-other-fill"></div></div>
+      </div>
+
+      <div class="br-row">
+        <div class="br-top">
+          <span class="br-name">Payroll &amp; Related <span class="br-badge neg">People</span></span>
+          <span class="br-amount neg" id="br-payroll-amt">—</span>
+        </div>
+        <div class="br-track"><div class="br-fill neg" id="br-payroll-fill"></div></div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <div class="footer">
+    <p id="footer-text">Financial Dashboard &nbsp;·&nbsp; All figures in USD thousands (K)</p>
+    <div id="install-wrap">
+      <button class="footer-install-btn" onclick="triggerInstall()">
+        <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M8 2v8M5 7l3 3 3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M2 12h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+        Download the App
+      </button>
+      <div class="ios-hint" id="ios-hint">Tap the Share button in Safari, then "Add to Home Screen"</div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ── ACCESS CODE — change this to whatever you want ──────────────────────
+// ── CONFIG ──────────────────────────────────────────────────────────────
+const XLSX_FILE  = 'Dashboard.xlsx';
+const SHEET_NAME = 'KPIs'; // sheet tab name, columns = months
+const MONTHS     = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+let ACCESS_CODE = null; // loaded from Dashboard.xlsx C2
+let _accessCodePromise = null;
+
+// ── LOCK SCREEN ──────────────────────────────────────────────────────────
+
+// Pre-load only C2 from the Excel file so the password is ready before unlock
+function loadAccessCode() {
+  _accessCodePromise = (async () => {
+    try {
+      const res = await fetch(XLSX_FILE, { cache: 'no-store' });
+      if (!res.ok) { ACCESS_CODE = ''; return; }
+      const buf = await res.arrayBuffer();
+      const wb  = XLSX.read(buf, { type: 'array' });
+      const ws  = wb.Sheets[SHEET_NAME];
+      const cell = ws?.['C2'];
+      ACCESS_CODE = (cell?.v != null) ? String(cell.v).trim() : '';
+      const c1 = ws?.['C1'];
+      if (c1?.v != null) {
+        const name = String(c1.v).trim();
+        document.getElementById('lock-company-name').textContent = name;
+      }
+    } catch (e) {
+      console.error('Could not load access code:', e);
+      ACCESS_CODE = '';
+    }
+  })();
+  return _accessCodePromise;
+}
+
+async function unlock() {
+  const input  = document.getElementById('lock-input');
+  const screen = document.getElementById('lock-screen');
+  const errEl  = document.getElementById('lock-error');
+  const btn    = document.querySelector('.lock-btn');
+
+  // Wait for access code to finish loading if still in progress
+  if (ACCESS_CODE === null) {
+    btn.disabled = true; btn.textContent = 'Loading…';
+    await _accessCodePromise;
+    btn.disabled = false; btn.textContent = 'Access Dashboard';
+  }
+
+  if (input.value === ACCESS_CODE) {
+    sessionStorage.setItem('dashboard_auth', '1');
+    screen.classList.add('hidden');
+    setTimeout(() => screen.remove(), 420);
+    errEl.classList.add('hidden');
+    fetchAllData();
+  } else {
+    input.classList.add('error');
+    errEl.classList.remove('hidden');
+    errEl.textContent = 'Incorrect access code. Try again.';
+    setTimeout(() => input.classList.remove('error'), 400);
+    input.value = '';
+    input.focus();
+  }
+}
+
+function toggleEye() {
+  const input = document.getElementById('lock-input');
+  const icon  = document.getElementById('eye-icon');
+  const show  = input.type === 'password';
+  input.type  = show ? 'text' : 'password';
+  icon.innerHTML = show
+    ? `<path d="M3 3l14 14M8.5 8.6A3 3 0 0 0 10 13a3 3 0 0 0 3-3 3 3 0 0 0-.6-1.8M6.2 6.3C4.3 7.4 2.9 9 2 10s3 6 8 6c1.8 0 3.4-.5 4.8-1.3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>`
+    : `<path d="M2 10s3-6 8-6 8 6 8 6-3 6-8 6-8-6-8-6z" stroke="currentColor" stroke-width="1.5"/><circle cx="10" cy="10" r="2.5" stroke="currentColor" stroke-width="1.5"/>`;
+}
+
+// Always pre-load the access code from Excel (needed for lock screen)
+loadAccessCode();
+
+// Check if already authenticated this session
+if (sessionStorage.getItem('dashboard_auth') === '1') {
+  document.getElementById('lock-screen').remove();
+} else {
+  // Prevent fetchData from auto-running — lock screen calls it on unlock
+  window.__locked = true;
+  setTimeout(() => document.getElementById('lock-input')?.focus(), 100);
+}
+
+// ── HELPERS ──────────────────────────────────────────────────────────────
+
+// Build label→cell map: colIdx is the data column index (2=C, 3=D, …)
+function buildMap(rows, colIdx = 2) {
+  const map = new Map();
+  for (const row of rows) {
+    if (!row?.c) continue;
+    const labelCell = row.c[0];
+    const valCell   = row.c[colIdx];
+    if (!labelCell?.v) continue;
+    map.set(String(labelCell.v).trim(), valCell ?? null);
+  }
+  return map;
+}
+
+// Extract number from cell {v, f}
+function toNum(cell) {
+  if (!cell) return 0;
+  const v = cell.v;
+  if (v === null || v === undefined) return 0;
+  if (typeof v === 'number') return v;
+  return parseFloat(String(v).replace(/[$,]/g, '')) || 0;
+}
+
+// Shared date parser — handles DD/MM/YY, MM/DD/YY, Excel serial, gviz Date()
+function parseDateCell(cell) {
+  if (!cell) return null;
+  if (cell.f) {
+    const parts = cell.f.split('/');
+    if (parts.length === 3) {
+      let [a, b, c] = parts.map(Number);
+      let day, mon;
+      if (a > 12) { day = a; mon = b; } // DD/MM/YY
+      else        { mon = a; day = b; } // MM/DD/YY
+      if (c < 100) c += 2000;
+      return new Date(c, mon - 1, day);
+    }
+  }
+  if (typeof cell.v === 'number')
+    return new Date(Math.round((cell.v - 25569) * 86400000));
+  if (typeof cell.v === 'string') {
+    const m = cell.v.match(/Date\((\d+),(\d+),(\d+)\)/);
+    if (m) return new Date(+m[1], +m[2], +m[3]);
+  }
+  return null;
+}
+
+// Format date cell → "28 Feb 2026"
+function cellToDate(cell) {
+  const d = parseDateCell(cell);
+  if (!d) return cell?.f || String(cell?.v ?? '—');
+  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+// "Month YYYY" for the month BEFORE the report date
+function prevMonthLabel(cell) {
+  const d = parseDateCell(cell);
+  if (!d) return 'Previous Month';
+  return new Date(d.getFullYear(), d.getMonth() - 1, 1)
+    .toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+}
+
+function fmtK(v) {
+  return '$' + Math.abs(Math.round(v)).toLocaleString() + 'K';
+}
+
+function pct(part, total) {
+  if (!total) return '—';
+  return (part / total * 100).toFixed(1) + '%';
+}
+
+// Short month label from a date cell, e.g. "Jan 26"
+function colToTabLabel(cell) {
+  const d = parseDateCell(cell);
+  if (!d) return cell?.f || '?';
+  return `${MONTHS[d.getMonth()]} ${String(d.getFullYear() % 100).padStart(2, '0')}`;
+}
+
+// Discover months from data columns (col C = index 2, col D = index 3, …)
+function discoverMonths(rows) {
+  // Find the Date row
+  let dateRow = null;
+  for (const row of rows) {
+    if (row?.c?.[0]?.v && String(row.c[0].v).trim() === 'Date') {
+      dateRow = row; break;
+    }
+  }
+  if (!dateRow) return [{ colIdx: 2, label: 'Latest' }];
+
+  const months = [];
+  for (let idx = 2; idx < (dateRow.c?.length ?? 0); idx++) {
+    const cell = dateRow.c[idx];
+    if (!cell || cell.v === null) break; // no more data
+    months.push({ colIdx: idx, label: colToTabLabel(cell) });
+  }
+  return months.length > 0 ? months : [{ colIdx: 2, label: 'Latest' }];
+}
+
+// ── PWA INSTALL ──────────────────────────────────────────────────────────
+let deferredInstallPrompt = null;
+
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  deferredInstallPrompt = e;
+  showInstallBanner('install');
+});
+
+// iOS detection (no beforeinstallprompt support)
+const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+const isStandalone = window.matchMedia('(display-mode: standalone)').matches
+                  || window.navigator.standalone === true;
+
+if (isIOS && !isStandalone) {
+  showInstallBanner('ios');
+}
+
+// Hide install button if already running as standalone (installed)
+if (isStandalone) {
+  document.getElementById('install-wrap')?.remove();
+}
+
+async function triggerInstall() {
+  if (deferredInstallPrompt) {
+    deferredInstallPrompt.prompt();
+    const { outcome } = await deferredInstallPrompt.userChoice;
+    if (outcome === 'accepted') document.getElementById('install-wrap')?.remove();
+    deferredInstallPrompt = null;
+  } else if (isIOS && !isStandalone) {
+    const hint = document.getElementById('ios-hint');
+    if (hint) hint.style.display = hint.style.display === 'block' ? 'none' : 'block';
+  } else if (isStandalone) {
+    // already installed — hide the button
+    document.getElementById('install-wrap')?.remove();
+  }
+}
+
+function showInstallBanner(type) {
+  const banner = document.getElementById('install-banner');
+  const btn    = document.getElementById('install-btn');
+  const sub    = document.getElementById('install-sub');
+  if (!banner || sessionStorage.getItem('install_dismissed')) return;
+
+  if (type === 'ios') {
+    sub.textContent = 'Tap Share  →  "Add to Home Screen"';
+    btn.textContent = 'How?';
+    btn.onclick = () => { sub.style.fontWeight = '600'; sub.style.color = 'var(--teal)'; };
+  } else {
+    btn.onclick = async () => {
+      if (!deferredInstallPrompt) return;
+      deferredInstallPrompt.prompt();
+      const { outcome } = await deferredInstallPrompt.userChoice;
+      if (outcome === 'accepted') banner.remove();
+      deferredInstallPrompt = null;
+    };
+  }
+  banner.style.display = 'flex';
+}
+
+document.getElementById('install-banner')
+  ?.querySelector('.install-close')
+  ?.addEventListener('click', () => {
+    sessionStorage.setItem('install_dismissed', '1');
+  });
+
+// ── COUNTER ANIMATION ────────────────────────────────────────────────────
+function animateCount(el, target, duration = 1000) {
+  const abs = Math.abs(Math.round(target));
+  const start = performance.now();
+  function step(ts) {
+    const p = Math.min((ts - start) / duration, 1);
+    const ease = 1 - Math.pow(1 - p, 3);
+    el.textContent = Math.round(ease * abs).toLocaleString();
+    if (p < 1) requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
+}
+
+// ── BAR ANIMATION ────────────────────────────────────────────────────────
+function setBar(id, widthPct, delay = 400) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  setTimeout(() => { el.style.width = widthPct + '%'; }, delay);
+}
+
+// ── UPDATE DOM ───────────────────────────────────────────────────────────
+function updateDashboard(rows, colIdx = 2) {
+  const m = buildMap(rows, colIdx);
+  const g = key => toNum(m.get(key));
+
+  // Values — looked up by label in column A (robust to row changes)
+  const fxRate   = toNum(m.get('USD/ILS'));
+  const ils      = g('ILS Account');
+  const usd      = g('USD Account');
+  const stripe   = g('Stripe');
+  const svb      = g('SVB Account');
+  const mmf      = g('Other Securities (MMF)');
+  const bankDep  = g('Bank Deposits');
+  const resDep   = g('Restricted Deposit');
+  const total    = g('Total Cash');
+  const prevCash = g('Previous month Cash');
+  const income   = g('Income');
+  const payroll  = g('Payroll and Related Expenses');
+  const otherExp = g('Other Expenses');
+  const finInc   = g('Finaniclal Income');  // matches sheet typo
+  const netBR    = g('Net BR');
+  const grossBR  = g('Gross BR');
+  const mrr      = g('MRR');
+  const arr      = g('ARR');
+
+  // Date
+  const dateCell = m.get('Date');
+  const displayDate = cellToDate(dateCell);
+  document.getElementById('topbar-date').textContent = displayDate;
+  document.getElementById('total-cash-sub').textContent = 'All accounts · ' + displayDate;
+  const _co = document.getElementById('brand-company-name')?.textContent || 'Dashboard';
+  document.getElementById('footer-text').innerHTML =
+    `${_co} Financial Dashboard &nbsp;·&nbsp; ${displayDate} &nbsp;·&nbsp; All figures in USD thousands (K)`;
+  document.getElementById('prev-month-label').textContent = prevMonthLabel(dateCell);
+
+  // FX
+  document.getElementById('hero-fx-rate').textContent = fxRate || '—';
+
+  // Hero total cash
+  const heroEl = document.getElementById('hero-total');
+  heroEl.dataset.target = Math.round(total);
+  animateCount(heroEl, total);
+
+  // Hero prev + change
+  const change = total - prevCash;
+  const changePct = prevCash ? (change / prevCash * 100).toFixed(1) : 0;
+  document.getElementById('hero-prev').textContent = `Prev. ${fmtK(prevCash)}`;
+  const chip = document.getElementById('change-chip');
+  const isNeg = change < 0;
+  const arrow = isNeg
+    ? `<svg viewBox="0 0 10 10" fill="none"><path d="M5 2v6M2 5l3 3 3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`
+    : `<svg viewBox="0 0 10 10" fill="none"><path d="M5 8V2M2 5l3-3 3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+  chip.className = 'change-chip ' + (isNeg ? 'neg' : 'pos');
+  chip.innerHTML = arrow + ` ${isNeg ? '−' : '+'}${fmtK(change)} (${isNeg ? '' : '+'}${changePct}%)`;
+
+  // KPI cards
+  [['kpi-mrr', mrr], ['kpi-arr', arr], ['kpi-net-br', netBR], ['kpi-gross-br', grossBR]]
+    .forEach(([id, val]) => {
+      const el = document.getElementById(id);
+      el.dataset.target = Math.abs(Math.round(val));
+      animateCount(el, val);
+    });
+
+  // KPI bars (relative to ARR max)
+  const mrrPct = arr ? Math.min(mrr / arr * 100, 100) : 0;
+  setTimeout(() => { document.getElementById('kpi-mrr-bar').style.width = mrrPct + '%'; }, 400);
+  setTimeout(() => { document.getElementById('kpi-arr-bar').style.width = '72%'; }, 480);
+
+  // Bank rows + stack bars + legend labels
+  const T = total || 1;
+  [
+    { k: 'ils',    v: ils,    label: 'ILS',        delay: 550 },
+    { k: 'usd',    v: usd,    label: 'USD',        delay: 350 },
+    { k: 'stripe', v: stripe, label: 'Stripe',     delay: 500 },
+    { k: 'svb',    v: svb,    label: 'SVB',        delay: 450 },
+    { k: 'mmf',    v: mmf,    label: 'MMF',        delay: 400 },
+    { k: 'res',    v: resDep, label: 'Restricted', delay: 600 },
+  ].forEach(({ k, v, label, delay }) => {
+    document.getElementById(`${k}-val`).textContent = fmtK(v);
+    document.getElementById(`${k}-pct`).textContent = pct(v, T);
+    setBar(`sb-${k}`, v / T * 100, delay);
+    document.getElementById(`leg-${k}`).textContent = `${label} ${pct(v, T)}`;
+  });
+  document.getElementById('bankdep-val').textContent    = fmtK(bankDep);
+  document.getElementById('total-cash-val').textContent = fmtK(total);
+
+  // Previous cash
+  document.getElementById('prev-cash-val').textContent = fmtK(prevCash);
+
+  // BR breakdown
+  const absNetBR = Math.abs(netBR) || 1;
+  document.getElementById('br-total-val').textContent = `−${fmtK(netBR)}`;
+  document.getElementById('br-income-amt').textContent  = `+${fmtK(income)}`;
+  document.getElementById('br-fincome-amt').textContent = `+${fmtK(finInc)}`;
+  document.getElementById('br-other-amt').textContent   = `−${fmtK(otherExp)}`;
+  document.getElementById('br-payroll-amt').textContent = `−${fmtK(payroll)}`;
+
+  setBar('br-income-fill',  Math.abs(income)  / absNetBR * 100, 500);
+  setBar('br-fincome-fill', Math.abs(finInc)  / absNetBR * 100, 580);
+  setBar('br-other-fill',   Math.abs(otherExp)/ absNetBR * 100, 660);
+  setBar('br-payroll-fill', Math.abs(payroll) / absNetBR * 100, 740);
+}
+
+// ── DATA & TABS ──────────────────────────────────────────────────────────
+let allRows = null;
+let currentColIdx = 2; // column C = index 2 (first data column)
+
+function renderTabs(months, activeColIdx) {
+  const wrap = document.getElementById('month-tabs-wrap');
+  const container = document.getElementById('month-tabs');
+  if (!wrap || !container) return;
+  container.innerHTML = '';
+
+  if (months.length < 2) { wrap.style.display = 'none'; return; }
+
+  months.forEach(month => {
+    const btn = document.createElement('button');
+    btn.className = 'month-tab' + (month.colIdx === activeColIdx ? ' active' : '');
+    btn.textContent = month.label;
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.month-tab').forEach(t => t.classList.remove('active'));
+      btn.classList.add('active');
+      currentColIdx = month.colIdx;
+      updateDashboard(allRows, month.colIdx);
+    });
+    container.appendChild(btn);
+  });
+
+  wrap.style.display = '';
+  const activeBtn = container.querySelector('.month-tab.active');
+  if (activeBtn) setTimeout(() => activeBtn.scrollIntoView({ inline: 'end', block: 'nearest' }), 80);
+}
+
+// Convert a SheetJS sheet to the gviz-like row format the dashboard expects:
+// rows[r].c[c] = { v: rawValue, f: formattedText | null }
+function xlsxSheetToRows(sheet) {
+  if (!sheet || !sheet['!ref']) return [];
+  const range = XLSX.utils.decode_range(sheet['!ref']);
+  const rows = [];
+  for (let r = range.s.r; r <= range.e.r; r++) {
+    const cells = [];
+    for (let c = range.s.c; c <= range.e.c; c++) {
+      const addr = XLSX.utils.encode_cell({ r, c });
+      const cell = sheet[addr];
+      cells.push(cell ? { v: cell.v ?? null, f: cell.w ?? null } : null);
+    }
+    rows.push({ c: cells });
+  }
+  return rows;
+}
+
+async function fetchAllData(keepCurrentTab = false) {
+  const btn     = document.getElementById('refresh-btn');
+  const toast   = document.getElementById('error-toast');
+  const errMsg  = document.getElementById('error-msg');
+  const lastUpd = document.getElementById('last-updated');
+
+  btn.classList.add('spinning');
+  toast.classList.remove('show');
+
+  try {
+    const res = await fetch(XLSX_FILE, { cache: 'no-store' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const arrayBuffer = await res.arrayBuffer();
+
+    const workbook = XLSX.read(arrayBuffer, { type: 'array', cellText: true, cellDates: false });
+    const sheet = workbook.Sheets[SHEET_NAME];
+    if (!sheet) throw new Error(`Sheet "${SHEET_NAME}" not found in Dashboard.xlsx`);
+
+    allRows = xlsxSheetToRows(sheet);
+
+    // Read company name (C1) and access code (C2) directly by cell address
+    const companyName = String(sheet['C1']?.v ?? '').trim() || 'Dashboard';
+    const c2val = sheet['C2']?.v;
+    if (c2val != null) ACCESS_CODE = String(c2val).trim();
+    document.title = `${companyName} — Monthly Dashboard`;
+    document.getElementById('lock-company-name').textContent    = companyName;
+    document.getElementById('brand-company-name').textContent   = companyName;
+    document.getElementById('install-company-name').textContent = `Install ${companyName}`;
+    const pwaMeta = document.getElementById('pwa-title');
+    if (pwaMeta) pwaMeta.setAttribute('content', companyName);
+
+    // Discover months from columns
+    const months = discoverMonths(allRows);
+    const targetCol = keepCurrentTab && months.find(m => m.colIdx === currentColIdx)
+      ? currentColIdx
+      : months[months.length - 1]?.colIdx ?? 2;
+    currentColIdx = targetCol;
+
+    renderTabs(months, targetCol);
+    updateDashboard(allRows, targetCol);
+
+    const now = new Date();
+    lastUpd.textContent = `Updated ${now.toLocaleTimeString('en-GB', {hour:'2-digit', minute:'2-digit'})}`;
+    lastUpd.classList.add('visible');
+  } catch (e) {
+    console.error('Fetch error:', e);
+    errMsg.textContent = `Could not load Dashboard.xlsx: ${e.message}`;
+    toast.classList.add('show');
+  } finally {
+    btn.classList.remove('spinning');
+  }
+}
+
+// ── INIT ─────────────────────────────────────────────────────────────────
+if (!window.__locked) fetchAllData();
+
+// Register Service Worker (PWA)
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch(() => {});
+  });
+}
+</script>
+</body>
+</html>
