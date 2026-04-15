@@ -757,7 +757,8 @@ function loadAccessCode() {
       const c1 = ws?.['C1'];
       if (c1?.v != null) {
         const name = String(c1.v).trim();
-        document.getElementById('lock-company-name').textContent = name;
+        const lockNameEl = document.getElementById('lock-company-name');
+        if (lockNameEl) lockNameEl.textContent = name;
       }
     } catch (e) {
       console.error('Could not load access code:', e);
@@ -1178,9 +1179,12 @@ async function fetchAllData(keepCurrentTab = false) {
     const c2val = sheet['C2']?.v;
     if (c2val != null) ACCESS_CODE = String(c2val).trim();
     document.title = `${companyName} — Monthly Dashboard`;
-    document.getElementById('lock-company-name').textContent    = companyName;
-    document.getElementById('brand-company-name').textContent   = companyName;
-    document.getElementById('install-company-name').textContent = `Install ${companyName}`;
+    const lockNameEl2 = document.getElementById('lock-company-name');
+    if (lockNameEl2) lockNameEl2.textContent = companyName;
+    const brandNameEl = document.getElementById('brand-company-name');
+    if (brandNameEl) brandNameEl.textContent = companyName;
+    const installNameEl = document.getElementById('install-company-name');
+    if (installNameEl) installNameEl.textContent = `Install ${companyName}`;
     const pwaMeta = document.getElementById('pwa-title');
     if (pwaMeta) pwaMeta.setAttribute('content', companyName);
 
